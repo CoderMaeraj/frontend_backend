@@ -1,0 +1,271 @@
+// Dummy data for the pages whose APIs are not in the backend yet:
+// resources, the public landing page and the admin pages other than mentor approval.
+// Lives in memory, so changes (accept, approve, send...) persist until page reload.
+import arjun from '@/assets/img/arjun.jpg'
+import priya from '@/assets/img/priya.jpg'
+import priyaBig from '@/assets/img/priya-big.jpg'
+import rahul from '@/assets/img/rahul.jpg'
+import sneha from '@/assets/img/sneha.jpg'
+import rohit from '@/assets/img/rohit.jpg'
+import ananya from '@/assets/img/ananya.jpg'
+import karan from '@/assets/img/karan.jpg'
+import aisha from '@/assets/img/aisha.jpg'
+import resCareer from '@/assets/img/res-career.jpg'
+import resResume from '@/assets/img/res-resume.jpg'
+import resHigher from '@/assets/img/res-higher.jpg'
+import resStartup from '@/assets/img/res-startup.jpg'
+
+const db = {
+  mentors: [
+    {
+      id: 'mn1', name: 'Priya Sharma', title: 'Product Manager', company: 'TechCorp', location: 'Bengaluru, India',
+      avatar: priya, photo: priyaBig, domain: 'Product', experience: 6, match: 91, available: true, rating: 4.9, sessions: 48,
+      tags: ['Product Management', 'Career Growth', 'Strategy', 'Leadership'], goals: ['Internships', 'Jobs'],
+      quote: 'Shares relevant industry experience in your field.',
+      about: "I'm a Product Manager at TechCorp with 6+ years of experience building consumer products. I enjoy mentoring students and helping them navigate career decisions.",
+      careerPath: [
+        { title: 'Product Manager', org: 'TechCorp', period: '2022 – Present' },
+        { title: 'Associate Product Manager', org: 'GrowthX', period: '2020 – 2022' },
+        { title: 'Software Engineer', org: 'InnoTech', period: '2018 – 2020' },
+        { title: 'B.Tech – Computer Science', org: 'National Institute of Technology', period: '2014 – 2018' }
+      ],
+      slots: ['Wed, 4 Nov 2026 · 4:00 – 4:30 PM', 'Thu, 5 Nov 2026 · 6:00 – 6:30 PM', 'Sat, 7 Nov 2026 · 11:00 – 11:30 AM', 'Tue, 10 Nov 2026 · 5:00 – 5:30 PM']
+    },
+    {
+      id: 'mn2', name: 'Arjun Mehta', title: 'Software Engineer', company: 'Tech Solutions Ltd.', location: 'Pune, India',
+      avatar: arjun, domain: 'Engineering', experience: 4, match: 87, available: true, rating: 4.8, sessions: 31,
+      tags: ['Machine Learning', 'Career Planning', 'Higher Studies'], goals: ['Jobs', 'Higher studies'],
+      quote: 'Experienced in guiding students to top tech roles.',
+      about: 'Backend and ML engineer. I help students plan their first engineering role and prepare for technical interviews.',
+      careerPath: [
+        { title: 'Software Engineer', org: 'Tech Solutions Ltd.', period: '2022 – Present' },
+        { title: 'SDE Intern', org: 'CloudNine', period: '2021' },
+        { title: 'B.E. – Information Technology', org: 'Pune Institute of Engineering', period: '2018 – 2022' }
+      ],
+      slots: ['Thu, 5 Nov 2026 · 7:00 – 7:30 PM', 'Sun, 8 Nov 2026 · 10:00 – 10:30 AM']
+    },
+    {
+      id: 'mn3', name: 'Sneha Iyer', title: 'Data Scientist', company: 'AI Research Labs', location: 'Chennai, India',
+      avatar: sneha, domain: 'Data Science', experience: 5, match: 84, available: true, rating: 4.9, sessions: 40,
+      tags: ['Data Science', 'Higher Studies', 'Research'], goals: ['Higher studies', 'Jobs'],
+      quote: 'Helps students explore higher studies and research.',
+      about: 'Data scientist working on applied NLP. Happy to talk about MS/PhD applications and data roles.',
+      careerPath: [
+        { title: 'Data Scientist', org: 'AI Research Labs', period: '2023 – Present' },
+        { title: 'M.S. – Data Science', org: 'University of Edinburgh', period: '2021 – 2022' },
+        { title: 'B.Tech – ECE', org: 'Anna University', period: '2016 – 2020' }
+      ],
+      slots: ['Fri, 6 Nov 2026 · 5:00 – 5:30 PM', 'Sat, 7 Nov 2026 · 3:00 – 3:30 PM']
+    },
+    {
+      id: 'mn4', name: 'Rahul Verma', title: 'Founder', company: 'StartupX', location: 'Delhi, India',
+      avatar: rahul, domain: 'Entrepreneurship', experience: 8, match: 78, available: false, rating: 4.7, sessions: 22,
+      tags: ['Entrepreneurship', 'Business Strategy', 'Product Development'], goals: ['Entrepreneurship', 'Freelancing'],
+      quote: 'Built and scaled two startups from zero.',
+      about: 'Two-time founder. I mentor students on validating ideas, early fundraising and building a team.',
+      careerPath: [
+        { title: 'Founder & CEO', org: 'StartupX', period: '2020 – Present' },
+        { title: 'Co-founder', org: 'Kirana Cloud', period: '2017 – 2020' }
+      ],
+      slots: []
+    },
+    {
+      id: 'm1', name: 'Rohit Mehta', title: 'Product Manager', company: 'FinTech Solutions', location: 'Mumbai, India',
+      avatar: rohit, domain: 'Product', experience: 6, match: 82, available: true, rating: 4.8, sessions: 36,
+      tags: ['Product Management', 'Career Transition', 'Interview Preparation'], goals: ['Jobs', 'Internships'],
+      quote: 'Helps engineers move into product roles.',
+      about: "I'm a product manager with 6+ years of experience building consumer fintech products.",
+      careerPath: [
+        { title: 'Product Manager', org: 'FinTech Solutions', period: '2021 – Present' },
+        { title: 'Software Engineer', org: 'TechCorp', period: '2018 – 2021' }
+      ],
+      slots: ['Mon, 2 Nov 2026 · 9:00 – 9:30 AM', 'Tue, 3 Nov 2026 · 7:00 – 7:30 PM']
+    },
+    {
+      id: 'mn6', name: 'Neha Sharma', title: 'Analytics Lead', company: 'RetailIQ', location: 'Hyderabad, India',
+      avatar: null, domain: 'Data Science', experience: 7, match: 76, available: true, rating: 4.6, sessions: 18,
+      tags: ['Data Roles', 'SQL', 'Career Transition'], goals: ['Jobs', 'Internships'],
+      quote: 'Practical guidance for analytics careers.',
+      about: 'I lead a 10-member analytics team and help students prepare for data analyst roles.',
+      careerPath: [{ title: 'Analytics Lead', org: 'RetailIQ', period: '2022 – Present' }],
+      slots: ['Wed, 4 Nov 2026 · 8:00 – 8:30 PM']
+    }
+  ],
+
+  // Student profiles a mentor can view from a request (matches the Student table:
+  // academic_level, programme, dual_degree, bio, career_goal, LinkedIn + StudentSkills)
+  studentProfiles: [
+    {
+      id: 'st1', name: 'Karan Patel', avatar: karan, email: 'karan.patel@demo.com', institute: 'National College of Commerce',
+      academicLevel: 'BS', programme: 'B.S. - Buisiness Management', year: '4th Year', dualDegree: '',
+      bio: 'Final-year commerce student who runs a small campus thrift store. Curious about turning side projects into real businesses.',
+      careerGoal: 'Entrepreneurship', skills: ['Communication', 'Leadership', 'Public Speaking'],
+      interests: ['Startups', 'Marketing', 'Finance'], linkedin: 'https://www.linkedin.com/in/karan-patel-demo',
+      joinedOn: 'Aug 2026', pastMentorships: 0
+    },
+    {
+      id: 'st2', name: 'Ishita Roy', avatar: null, email: 'ishita.roy@demo.com', institute: 'Riverside Institute of Technology',
+      academicLevel: 'Diploma', programme: 'B.S. – Data Science and Applications', year: '2nd Year', dualDegree: 'B.S. – Electronics and Communication',
+      bio: 'Second-year student who enjoys building small web apps and wants to understand how product decisions get made.',
+      careerGoal: 'Jobs', skills: ['Python', 'SQL', 'Design'],
+      interests: ['Product Management', 'UX Research', 'Web Development'], linkedin: 'https://www.linkedin.com/in/ishita-roy-demo',
+      joinedOn: 'Jul 2026', pastMentorships: 1
+    },
+    {
+      id: 'st3', name: 'Dev Malhotra', avatar: null, email: 'dev.malhotra@demo.com', institute: 'Westbridge Business School',
+      academicLevel: 'BSc', programme: 'B.S. - Buisiness Management', year: '1st Year', dualDegree: '',
+      bio: 'MBA student with two years of analyst experience, preparing for product internship interviews this winter.',
+      careerGoal: 'Internships', skills: ['Data Analysis', 'Product Management', 'Communication'],
+      interests: ['Case Interviews', 'Consumer Tech'], linkedin: '',
+      joinedOn: 'Sep 2026', pastMentorships: 0
+    },
+    {
+      id: 'st4', name: 'Sara Khan', avatar: null, email: 'sara.khan@demo.com', institute: 'City College',
+      academicLevel: 'BSc', programme: 'B.S. – Data Science and Applications', year: '3rd Year', dualDegree: '',
+      bio: 'Interested in pursuing a master\'s in data science abroad and shortlisting universities.',
+      careerGoal: 'Higher studies', skills: ['Python', 'Machine Learning'], mentorId: 'mn3', // matched with Sneha after Rohit declined
+      interests: ['Research', 'Statistics'], linkedin: 'https://www.linkedin.com/in/sara-khan-demo',
+      joinedOn: 'Jun 2026', pastMentorships: 2
+    },
+    {
+      // Ananya is the demo student account (users.s1)
+      id: 's1', name: 'Ananya Sharma', avatar: ananya, email: 'student@demo.com', institute: 'Riverside Institute of Technology',
+      academicLevel: 'BSc', programme: 'B.S. – Data Science and Applications', year: '3rd Year', dualDegree: '',
+      bio: 'Third-year student who loves turning data into product decisions. Working towards a product management role.',
+      careerGoal: 'Internships', skills: ['Python', 'Data Analysis', 'Machine Learning'],
+      interests: ['AI/ML', 'Web Development', 'Product Management'], linkedin: 'https://www.linkedin.com/in/ananya-sharma-demo',
+      joinedOn: 'Jun 2026', pastMentorships: 0
+    },
+    {
+      id: 'st5', name: 'Aman Gupta', avatar: null, email: 'aman.gupta@demo.com', institute: 'Pune Institute of Engineering',
+      academicLevel: 'BS', programme: 'B.S. – Electronics and Communication', year: '4th Year', dualDegree: 'B.S. – Data Science and Applications',
+      bio: 'Final-year student preparing for product analyst roles. Enjoys guesstimates and dashboarding.',
+      careerGoal: 'Jobs', skills: ['SQL', 'Data Analysis', 'Communication'],
+      interests: ['Analytics', 'Consumer Tech'], linkedin: '',
+      joinedOn: 'May 2026', pastMentorships: 1
+    }
+  ],
+
+  // Mentor side (Rohit)
+  incomingRequests: [
+    { id: 'ir1', studentId: 'st1', name: 'Karan Patel', avatar: karan, course: 'B.Com, Final Year', institute: 'National College of Commerce', goal: 'Explore opportunities in entrepreneurship and understand how to validate and start a business.', topic: 'Entrepreneurship', message: "I'm very interested in starting my own business after graduation. I'd love to get your guidance on idea validation and early steps.", receivedAgo: '2 days ago', status: 'pending', mode: 'Video call' },
+    { id: 'ir2', studentId: 'st2', name: 'Ishita Roy', avatar: null, course: 'B.Tech CSE, 2nd Year', institute: 'Riverside Institute of Technology', goal: 'Pursue a career in product management and learn how to transition from a technical role.', topic: 'Jobs', message: "I've been following your work and would love to learn how to break into product and what skills I should start building in college.", receivedAgo: '4 days ago', status: 'pending', mode: 'Chat' },
+    { id: 'ir3', studentId: 'st3', name: 'Dev Malhotra', avatar: null, course: 'MBA, 1st Year', institute: 'Westbridge Business School', goal: 'Prepare for product internship interviews.', topic: 'Internships', message: 'Could you help me with case interview preparation?', receivedAgo: '1 week ago', status: 'accepted', mode: 'Video call' },
+    { id: 'ir4', studentId: 'st4', name: 'Sara Khan', avatar: null, course: 'B.Sc, Final Year', institute: 'City College', goal: 'Higher studies abroad.', topic: 'Higher studies', message: 'Need help choosing universities.', receivedAgo: '2 weeks ago', status: 'declined', mode: 'Chat', reason: 'Outside my area, please consider Sneha Iyer.' }
+  ],
+
+  mentees: [
+    { id: 'me1', studentId: 's1', name: 'Ananya Sharma', avatar: ananya, course: 'B.Tech Computer Science, 3rd Year', institute: 'Riverside Institute of Technology', goal: 'Transition to a product management role', nextSession: 'Wed, 4 Nov 2026 · 4:00 PM', lastNote: 'Discussed resume edits and product portfolio. Shared useful resources.', progress: 60 },
+    { id: 'me2', studentId: 'st5', name: 'Aman Gupta', avatar: null, course: 'B.Tech IT, Final Year', institute: 'Pune Institute of Engineering', goal: 'Crack product analyst interviews', nextSession: 'Fri, 6 Nov 2026 · 7:00 PM', lastNote: 'Covered metrics questions and guesstimates.', progress: 35 }
+  ],
+
+  // Mentor's conversations, keyed by mentee id. from: 'mentor' | 'student'
+  availability: {
+    available: true,
+    maxMentees: 3,
+    timezone: 'IST',
+    // Weekly schedule: each day can be switched on/off and hold one or more
+    // time ranges (24h "HH:mm"). Ranges on a day must not overlap and end > start.
+    schedule: [
+      { day: 'Monday', enabled: true, ranges: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '17:00' }] },
+      { day: 'Tuesday', enabled: true, ranges: [{ start: '18:00', end: '21:00' }] },
+      { day: 'Wednesday', enabled: true, ranges: [{ start: '09:00', end: '11:00' }] },
+      { day: 'Thursday', enabled: false, ranges: [{ start: '09:00', end: '17:00' }] },
+      { day: 'Friday', enabled: true, ranges: [{ start: '17:00', end: '20:00' }] },
+      { day: 'Saturday', enabled: true, ranges: [{ start: '10:00', end: '13:00' }, { start: '15:00', end: '18:00' }] },
+      { day: 'Sunday', enabled: false, ranges: [{ start: '10:00', end: '12:00' }] }
+    ]
+  },
+
+  resources: [
+    { id: 'rs1', title: 'How to Choose the Right Career Path', category: 'Career Planning', type: 'Article', mins: 6, thumb: resCareer },
+    { id: 'rs2', title: 'Resume Building Guide', category: 'Placements', type: 'Guide', mins: 10, thumb: resResume },
+    { id: 'rs3', title: "A Beginner's Guide to Higher Studies", category: 'Higher Studies', type: 'Guide', mins: 12, thumb: resHigher },
+    { id: 'rs4', title: 'Entrepreneurship Basics', category: 'Entrepreneurship', type: 'Video', mins: 8, thumb: resStartup },
+    { id: 'rs5', title: 'A Guide to Product Internships', category: 'Placements', type: 'Article', mins: 5, thumb: resCareer },
+    { id: 'rs6', title: 'Product Management Roadmap', category: 'Career Planning', type: 'Video', mins: 8, thumb: resStartup },
+    { id: 'rs7', title: 'Writing a Strong SOP', category: 'Higher Studies', type: 'Article', mins: 7, thumb: resResume },
+    { id: 'rs8', title: 'Interview Preparation Checklist', category: 'Placements', type: 'Guide', mins: 4, thumb: resHigher }
+  ],
+
+  // ===== Admin =====
+  adminStats: { totalStudents: 1248, approvedMentors: 312, pendingRequests: 87, activeMentorships: 426, completedSessions: 1892 },
+  requestStatus: [
+    { label: 'Accepted', value: 184, color: '#2e7d32' },
+    { label: 'Pending', value: 87, color: '#d5a64a' },
+    { label: 'Declined', value: 52, color: '#d32f2f' },
+    { label: 'Inactive', value: 78, color: '#b8af9e' }
+  ],
+
+  mentorApplications: [
+    {
+      id: 'ap1', name: 'Aisha Rao', avatar: aisha, role: 'Product Manager', company: 'TechNova', location: 'Bengaluru, India',
+      careerPath: 'Product Management', expertise: ['Product Strategy', 'User Research'], submitted: '28 Oct 2026', status: 'pending', experience: '6+ years',
+      summary: 'Product Manager with 6+ years of experience building consumer products. Passionate about product management and career transitions.',
+      topics: ['Product Strategy', 'User Research', 'Career Transitions'],
+      bio: 'I enjoy mentoring students who are curious about product management and the tech industry.',
+      checklist: { 'Identity proof': true, 'Professional background': true, 'LinkedIn profile': true, 'Mentor statement': true, 'References (2)': false, 'Application form': true }
+    },
+    {
+      id: 'ap2', name: 'Karthik Iyer', avatar: null, role: 'Data Scientist', company: 'DataMint', location: 'Chennai, India',
+      careerPath: 'Data Science', expertise: ['Machine Learning', 'Career Transition'], submitted: '26 Oct 2026', status: 'pending', experience: '5 years',
+      summary: 'Data scientist focused on ML in fintech. Wants to help students move into data roles.',
+      topics: ['Machine Learning', 'Data roles'], bio: 'Previously a teaching assistant for ML courses.',
+      checklist: { 'Identity proof': true, 'Professional background': true, 'LinkedIn profile': true, 'Mentor statement': false, 'References (2)': false, 'Application form': true }
+    },
+    {
+      id: 'ap3', name: 'Meera Nair', avatar: null, role: 'Founder', company: 'GreenLoop', location: 'Kochi, India',
+      careerPath: 'Entrepreneurship', expertise: ['Startup Building', 'Sustainability'], submitted: '24 Oct 2026', status: 'pending', experience: '8 years',
+      summary: 'Founder of a sustainability startup.', topics: ['Startups', 'Fundraising'], bio: 'Love helping first-time founders.',
+      checklist: { 'Identity proof': true, 'Professional background': true, 'LinkedIn profile': false, 'Mentor statement': true, 'References (2)': true, 'Application form': true }
+    },
+    { id: 'ap4', name: 'Priya Sharma', avatar: priya, role: 'Product Manager', company: 'TechCorp', location: 'Bengaluru, India', careerPath: 'Product Management', expertise: ['Product Management'], submitted: '2 Jul 2026', status: 'approved', experience: '6+ years', summary: '', topics: [], bio: '', checklist: {} },
+    { id: 'ap5', name: 'Sneha Iyer', avatar: sneha, role: 'Data Scientist', company: 'AI Research Labs', location: 'Chennai, India', careerPath: 'Data Science', expertise: ['Data Science'], submitted: '18 Jun 2026', status: 'approved', experience: '5 years', summary: '', topics: [], bio: '', checklist: {} },
+    { id: 'ap6', name: 'Vikas Jain', avatar: null, role: 'Sales Executive', company: 'QuickMart', location: 'Jaipur, India', careerPath: 'Sales', expertise: ['Sales'], submitted: '3 Jun 2026', status: 'rejected', experience: '1 year', summary: '', topics: [], bio: '', checklist: {} }
+  ],
+
+  participation: {
+    months: ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
+    requests: [62, 78, 95, 110, 132, 151],
+    completed: [48, 60, 71, 88, 104, 126],
+    capacityUsed: 68,
+    mentorsAvailable: 23,
+    lowAvailability: [
+      { name: 'Rohit Mehta', avatar: rohit, current: 2, capacity: 3 },
+      { name: 'Priya Sharma', avatar: priya, current: 5, capacity: 5 },
+      { name: 'Sneha Iyer', avatar: sneha, current: 4, capacity: 5 },
+      { name: 'Arjun Mehta', avatar: arjun, current: 4, capacity: 6 }
+    ],
+    topics: [
+      { topic: 'Higher studies', requests: 110, mentors: 4, slots: 20 },
+      { topic: 'Data roles', requests: 86, mentors: 12, slots: 60 },
+      { topic: 'Entrepreneurship', requests: 78, mentors: 10, slots: 50 },
+      { topic: 'Freelancing', requests: 64, mentors: 8, slots: 40 }
+    ]
+  },
+
+  concerns: [
+    {
+      id: 'c1', type: 'Inappropriate behaviour', reporterType: 'Student', reportedOn: '29 Oct 2026', status: 'Open',
+      mentee: 'Priya Nair', mentor: 'Rahul Verma',
+      details: 'The mentor made uncomfortable personal comments during a session and repeatedly contacted me outside the platform.',
+      notes: '', timeline: [{ at: '29 Oct 2026, 4:30 PM', text: 'Report submitted by student' }]
+    },
+    {
+      id: 'c2', type: 'Missed sessions', reporterType: 'Mentor', reportedOn: '27 Oct 2026', status: 'Under review',
+      mentee: 'Aman Gupta', mentor: 'Rohit Mehta',
+      details: 'Mentee missed two scheduled sessions without informing.',
+      notes: 'Reached out to the mentee for their response.', timeline: [{ at: '27 Oct 2026, 11:00 AM', text: 'Report submitted by mentor' }, { at: '28 Oct 2026, 2:15 PM', text: 'Marked under review' }]
+    },
+    {
+      id: 'c3', type: 'Unresponsive mentee', reporterType: 'Mentor', reportedOn: '20 Oct 2026', status: 'Resolved',
+      mentee: 'Kabir Shah', mentor: 'Sneha Iyer', details: 'No response for 3 weeks.', notes: 'Mentorship closed with consent.', timeline: [{ at: '20 Oct 2026, 9:00 AM', text: 'Report submitted by mentor' }, { at: '22 Oct 2026, 5:00 PM', text: 'Resolved' }]
+    },
+    {
+      id: 'c4', type: 'Scheduling issues', reporterType: 'Student', reportedOn: '14 Oct 2026', status: 'Closed',
+      mentee: 'Ishita Roy', mentor: 'Arjun Mehta', details: 'Session time kept changing.', notes: 'Mentor updated availability.', timeline: [{ at: '14 Oct 2026, 1:00 PM', text: 'Report submitted by student' }, { at: '15 Oct 2026, 10:00 AM', text: 'Closed' }]
+    }
+  ]
+}
+
+export default db

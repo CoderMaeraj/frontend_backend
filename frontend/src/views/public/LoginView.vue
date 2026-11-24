@@ -1,0 +1,117 @@
+<template>
+  <div class="auth-page">
+    <div class="auth-card">
+      <aside class="panel">
+        <AppLogo />
+        <h2 class="fade-up">Career guidance,<br />made more personal.</h2>
+        <div class="features stagger">
+          <span><Users /> Meaningful</span>
+          <span><MessageCircle /> Real conversations</span>
+          <span><ShieldCheck /> Brighter futures</span>
+        </div>
+        <img :src="ill" alt="" class="ill" />
+      </aside>
+
+      <section class="form-side">
+        <div class="form-inner stagger">
+          <div>
+            <h1>Welcome back</h1>
+            <p class="muted mt-1">Sign in to your MentorConnect account.</p>
+          </div>
+
+          <form class="stack" @submit.prevent="submit()">
+            <div class="field">
+              <label class="label" for="email">Email address</label>
+              <div class="input-icon"><Mail /><input id="email" v-model.trim="email" class="input" type="email" placeholder="you@example.com" autocomplete="email" /></div>
+            </div>
+            <div class="field">
+              <label class="label" for="pw">Password</label>
+              <div class="input-icon">
+                <Lock />
+                <input id="pw" v-model="password" class="input" :type="show ? 'text' : 'password'" placeholder="Enter your password" autocomplete="current-password" />
+                <button type="button" class="input-action" :aria-label="show ? 'Hide password' : 'Show password'" @click="show = !show"><EyeOff v-if="show" /><Eye v-else /></button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between small">
+              <label class="flex items-center gap-2"><input v-model="remember" type="checkbox" /> Remember me</label>
+              <button type="button" class="link-btn" @click="toast.info('Password reset will work once the backend is connected')">Forgot password?</button>
+            </div>
+            <p v-if="error" class="error-text">{{ error }}</p>
+            <button class="btn btn-primary btn-lg btn-block" :disabled="loading">
+              <span v-if="loading" class="spinner" /> <template v-else>Sign in <ArrowRight /></template>
+            </button>
+          </form>
+          <p class="center small muted">Don't have an account? <RouterLink to="/signup" class="bold">Create one</RouterLink></p>
+
+          <RouterLink to="/" class="explore">
+            <span class="icon-box"><Eye /></span>
+            <div class="grow"><b>Want to look around first?</b><p class="small muted">Explore the public home page.</p></div>
+            <ArrowRight class="arrow" />
+          </RouterLink>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Users, MessageCircle, ShieldCheck, Mail, Lock, Eye, EyeOff, ArrowRight } from '@lucide/vue'
+import AppLogo from '@/components/layout/AppLogo.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
+import ill from '@/assets/img/signin-ill.jpg'
+
+const auth = useAuthStore()
+const router = useRouter()
+const route = useRoute()
+const toast = useToast()
+
+const email = ref('')
+const password = ref('')
+const remember = ref(true)
+const show = ref(false)
+const loading = ref(false)
+const error = ref('')
+
+async function submit() {
+  error.value = ''
+  if (!email.value || !password.value) { error.value = 'Please enter email and password'; return }
+  loading.value = true
+  try {
+    await auth.login(email.value, password.value, remember.value)
+    toast.success(`Welcome back, ${auth.user.name.split(' ')[0]}!`)
+    router.push(route.query.redirect || auth.home)
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<style scoped>
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 15% 10%, var(--primary-100), transparent 40%), radial-gradient(circle at 90% 90%, #f3e9d6, transparent 35%), var(--bg); }
+.auth-card { width: 100%; max-width: 1040px; display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: var(--shadow-lg); animation: pop 0.6s var(--ease); }
+.panel { position: relative; display: flex; flex-direction: column; padding: 36px 36px 0; background: linear-gradient(160deg, #fdf9f1, #f8eedb 70%, #f4e2bd); color: var(--text); overflow: hidden; }
+.panel h2 { color: var(--text); font-size: 1.9rem; font-weight: 750; margin-top: 30px; }
+.features { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 22px; font-size: 13.5px; font-weight: 550; color: var(--text-2); }
+.features span { display: inline-flex; align-items: center; gap: 8px; }
+.features svg { width: 30px; height: 30px; padding: 7px; border-radius: 50%; background: #fff; color: var(--primary); box-shadow: var(--shadow-sm); }
+.ill { margin-top: auto; width: calc(100% + 72px); margin-left: -36px; max-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18%); mask-image: linear-gradient(to bottom, transparent, #000 18%); }
+
+.form-side { padding: 44px 48px; display: flex; align-items: center; }
+.form-inner { width: 100%; display: flex; flex-direction: column; gap: 20px; }
+.explore { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; background: var(--primary-50); color: var(--text); transition: background 0.2s; }
+.explore:hover { background: var(--primary-100); }
+.explore .icon-box { background: #fff; }
+.arrow { width: 18px; height: 18px; color: var(--primary); transition: transform 0.25s var(--ease); }
+.explore:hover .arrow { transform: translateX(4px); }
+
+@media (max-width: 860px) {
+  .auth-card { grid-template-columns: 1fr; }
+  .panel { display: none; }
+  .form-side { padding: 32px 24px; }
+}
+</style>
