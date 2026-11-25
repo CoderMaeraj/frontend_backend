@@ -22,7 +22,7 @@ class Config:
     PROFILE_COMPLETION_THRESHOLD = int(os.getenv("PROFILE_COMPLETION_THRESHOLD", "80"))
 
     # Frontend origins allowed to call the API.
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,https://editor.swagger.io").split(",")
 
     # Seeded admin account (created by `flask --app app seed`).
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@mentorconnect.local")

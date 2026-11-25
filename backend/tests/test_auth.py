@@ -481,3 +481,17 @@ def test_login_wrong_method():
 
     assert request.status_code == 405
     assert request.json()["message"] == "Method not allowed"
+
+@pytest.mark.parametrize("bad_email", [
+    "",
+    "plainaddress",
+    "missing-at.com",
+    "user@nodot",
+    "user@@double.com",
+    "user name@space.com",
+])
+def test_register_invalid_email(bad_email):
+    input_dict, request = register_user(email=bad_email)
+
+    assert request.status_code == 400
+    assert request.json()["message"] == "Enter a valid email"

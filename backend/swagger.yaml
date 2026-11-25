@@ -1,0 +1,2094 @@
+openapi: 3.0.3
+info:
+  title: MentorConnect API
+  version: 1.0.0
+  description: |
+    REST API for the MentorConnect platform (Flask backend).
+
+    **Authentication**: every endpoint except `/api/health`, `/api/auth/register` and
+    `/api/auth/login` needs an `Authorization: Bearer <token>` header. The token is a HS256 JWT
+    returned by register/login (lifetime 24 h, or 7 days with `remember: true`).
+    The current user is always taken from the token; ids in URLs/bodies only select resources,
+    which are then checked for ownership (another user's resource answers **404**).
+
+    **Errors** are always returned as `{ "message": "..." }`.
+
+    | Status | When |
+    |--------|------|
+    | 400 | Invalid / missing fields, wrong types, body is not a JSON object |
+    | 401 | Missing, invalid or expired token; account deleted or suspended |
+    | 403 | Wrong role · profile below the completion threshold · mentor not approved |
+    | 404 | Unknown id, or a resource that belongs to someone else |
+    | 409 | Invalid state change (already decided, duplicate request, capacity full, …) |
+
+    **Access gates**
+
+    - *Profile gate*: students and mentors whose `profileCompletion` is below
+      `PROFILE_COMPLETION_THRESHOLD` (default 80 %) get
+      `403 "Please complete your profile first"` on every endpoint except their profile
+      endpoints, `/api/options` and `/api/account*`.
+    - *Approval gate* (mentors): new mentors are `pending`. Pending and rejected mentors can use
+      only profile and availability; every other mentor endpoint returns 403.
+    - Only approved mentors with an active account and a complete profile are visible to students.
+
+    **Time**: all display strings are in IST (UTC+05:30). Display dates look like `28 Oct 2026`;
+    ISO timestamps (`...At` fields) are UTC with a `Z` suffix.
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+tags:
+  - name: Health
+  - name: Auth
+    description: Registration, login and current user
+  - name: Account
+    description: Shared student/mentor account settings and form options
+  - name: Student
+    description: Student profile, mentor discovery, requests and active mentorship
+  - name: Mentor
+    description: Mentor profile, availability, requests, mentees, messages and sessions
+  - name: Admin
+    description: Mentor application review
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ------------------------------------------------------------------ health
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ------------------------------------------------------------------ auth
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a student or mentor account
+      description: |
+        Creates the user and an empty role profile (student or mentor). New mentors start
+        unavailable and pending admin approval. Admin/faculty accounts cannot self-register.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, role]
+              properties:
+                name:
+                  type: string
+                  maxLength: 120
+                email:
+                  type: string
+                  format: email
+                  description: Stored lower-cased; must be unique.
+                password:
+                  type: string
+                  minLength: 6
+                role:
+                  type: string
+                  enum: [student, mentor]
+            example:
+              name: Asha Rao
+              email: asha@example.com
+              password: secret123
+              role: student
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                remember:
+                  type: boolean
+                  default: false
+                  description: Issue a long-lived token (7 days instead of 24 hours).
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Email or password missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Account suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user (validates the stored token)
+      responses:
+        '200':
+          description: The logged-in user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ------------------------------------------------------------------ account
+  /api/options:
+    get:
+      tags: [Account]
+      summary: Values for the profile / request forms
+      description: 'Roles: student, mentor. No profile gate.'
+      responses:
+        '200':
+          description: Form options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  careerGoals:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+                          nullable: true
+                  skills:
+                    type: array
+                    items:
+                      type: string
+                  academicLevels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AcademicLevel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/account:
+    patch:
+      tags: [Account]
+      summary: Update name and/or email
+      description: 'Roles: student, mentor. No profile gate. Only the keys sent are changed.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                email:
+                  type: string
+                  format: email
+                  maxLength: 255
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/account/password:
+    put:
+      tags: [Account]
+      summary: Change password
+      description: 'Roles: student, mentor. No profile gate.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 6
+                  description: Must differ from the current password and not be blank.
+      responses:
+        '200':
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Password updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Wrong role, or current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ------------------------------------------------------------------ student
+  /api/student/profile:
+    get:
+      tags: [Student]
+      summary: Get own student profile
+      description: 'Role: student. No profile gate.'
+      responses:
+        '200':
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Student]
+      summary: Update own student profile
+      description: |
+        Role: student. No profile gate. Only the keys that are sent are changed;
+        sending `null` or `""` clears a field. `skills` replaces the whole list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                academicLevel:
+                  allOf:
+                    - $ref: '#/components/schemas/AcademicLevel'
+                  nullable: true
+                programme:
+                  type: string
+                  maxLength: 150
+                  nullable: true
+                dualDegree:
+                  type: string
+                  maxLength: 150
+                  nullable: true
+                bio:
+                  type: string
+                  maxLength: 300
+                  nullable: true
+                careerGoal:
+                  type: string
+                  nullable: true
+                  description: Name of a career goal from `/api/options`.
+                linkedin:
+                  type: string
+                  nullable: true
+                  description: Must match `https://(www.)linkedin.com/...`.
+                skills:
+                  type: array
+                  maxItems: 5
+                  items:
+                    type: string
+                  description: Skill names from `/api/options` (duplicates are removed).
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentors:
+    get:
+      tags: [Student]
+      summary: Discover mentors
+      description: |
+        Role: student (profile gate applies). Returns only approved mentors with an active
+        account and a complete profile.
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive text search over name, title, company, domain, bio and skills.
+          schema:
+            type: string
+        - name: goal
+          in: query
+          description: Career goal name the mentor covers.
+          schema:
+            type: string
+        - name: domain
+          in: query
+          description: Exact mentoring area (career goal name).
+          schema:
+            type: string
+        - name: availability
+          in: query
+          description: '`available` returns only mentors currently accepting requests.'
+          schema:
+            type: string
+            enum: [available]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [match, experience]
+            default: match
+      responses:
+        '200':
+          description: Mentor cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MentorCard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentors/{mentorId}:
+    get:
+      tags: [Student]
+      summary: Mentor detail with career path and bookable slots
+      description: 'Role: student (profile gate applies).'
+      parameters:
+        - $ref: '#/components/parameters/MentorId'
+      responses:
+        '200':
+          description: Mentor detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/student/requests:
+    get:
+      tags: [Student]
+      summary: List own mentoring requests (newest first)
+      description: 'Role: student (profile gate applies).'
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Student]
+      summary: Send a mentoring request
+      description: |
+        Role: student (profile gate applies).
+        A student can have only one pending request at a time, cannot request a mentor they
+        already have an active mentorship with, and the mentor must be accepting requests
+        (approved, available and below capacity).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mentorId, goal]
+              properties:
+                mentorId:
+                  type: integer
+                goal:
+                  type: string
+                  description: Career goal name for this request.
+                message:
+                  type: string
+                  maxLength: 500
+                  nullable: true
+                slot:
+                  type: string
+                  nullable: true
+                  description: |
+                    A slot label exactly as returned in `slots` of `GET /api/mentors/{mentorId}`,
+                    e.g. `Wed, 4 Nov 2026 · 4:00 PM – 4:30 PM`. Must not be in the past and must
+                    match an active availability range.
+      responses:
+        '201':
+          description: Request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/student/requests/{requestId}/cancel:
+    patch:
+      tags: [Student]
+      summary: Cancel a pending request
+      description: 'Role: student (profile gate applies). Only pending requests can be cancelled.'
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Cancelled request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/student/mentorship:
+    get:
+      tags: [Student]
+      summary: Current active mentorship
+      description: |
+        Role: student (profile gate applies). Returns the most recent active mentorship or
+        `null`. Opening it marks the mentor's messages as read.
+      responses:
+        '200':
+          description: Active mentorship, or null when there is none
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StudentMentorship'
+                nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Student]
+      summary: Tick action items and/or mark the last session completed
+      description: |
+        Role: student (profile gate applies). At least one of `actionItems` or `completed`
+        must be sent. `completed: true` marks the latest booked session dated today or earlier
+        as completed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionItems:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, done]
+                    properties:
+                      id:
+                        type: integer
+                      done:
+                        type: boolean
+                completed:
+                  type: boolean
+                  enum: [true]
+      responses:
+        '200':
+          description: Updated mentorship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentMentorship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No active mentorship, or action item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: No booked session that has already taken place
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/student/mentorship/messages:
+    post:
+      tags: [Student]
+      summary: Send a message to the current mentor
+      description: 'Role: student (profile gate applies). Requires an active mentorship.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageBody'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: No active mentorship yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ------------------------------------------------------------------ mentor
+  /api/mentor/profile:
+    get:
+      tags: [Mentor]
+      summary: Get own mentor profile
+      description: 'Role: mentor (any approval status). No profile gate.'
+      responses:
+        '200':
+          description: Mentor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Mentor]
+      summary: Update own mentor profile
+      description: |
+        Role: mentor (any approval status). No profile gate. Only the keys that are sent are
+        changed; `skills` and `careerPath` replace the whole list. `avatar` is ignored
+        (no photo upload yet).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                workRole:
+                  type: string
+                  maxLength: 150
+                  nullable: true
+                company:
+                  type: string
+                  maxLength: 150
+                  nullable: true
+                workJoiningYear:
+                  type: integer
+                  minimum: 1950
+                  nullable: true
+                  description: Up to the current year.
+                bio:
+                  type: string
+                  maxLength: 300
+                  nullable: true
+                linkedin:
+                  type: string
+                  nullable: true
+                  description: Must match `https://(www.)linkedin.com/...`.
+                skills:
+                  type: array
+                  items:
+                    type: string
+                  description: Skill names from `/api/options`.
+                mentoringArea:
+                  type: string
+                  nullable: true
+                  description: Career goal name from `/api/options`.
+                careerPath:
+                  type: array
+                  maxItems: 20
+                  items:
+                    $ref: '#/components/schemas/CareerStepInput'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/availability:
+    get:
+      tags: [Mentor]
+      summary: Get weekly availability and capacity
+      description: 'Role: mentor (any approval status; profile gate applies).'
+      responses:
+        '200':
+          description: Availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Mentor]
+      summary: Update weekly availability and capacity
+      description: |
+        Role: mentor (any approval status; profile gate applies). Only the keys sent are
+        changed. Ranges matching an existing (day, start, end) are kept so bookings that point
+        at them survive; removed ranges are deleted. Ranges within a day must not overlap and an
+        enabled day needs at least one range.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                available:
+                  type: boolean
+                  description: Whether the mentor is taking new requests.
+                maxMentees:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  description: Cannot be lower than the current number of active mentees.
+                timezone:
+                  type: string
+                  enum: [IST]
+                  nullable: true
+                schedule:
+                  type: array
+                  items:
+                    type: object
+                    required: [day]
+                    properties:
+                      day:
+                        $ref: '#/components/schemas/DayOfWeek'
+                      enabled:
+                        type: boolean
+                        default: false
+                      ranges:
+                        type: array
+                        maxItems: 10
+                        items:
+                          type: object
+                          required: [start, end]
+                          properties:
+                            start:
+                              type: string
+                              pattern: '^\d{2}:\d{2}$'
+                              example: '16:00'
+                            end:
+                              type: string
+                              pattern: '^\d{2}:\d{2}$'
+                              example: '17:00'
+      responses:
+        '200':
+          description: Updated availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/requests:
+    get:
+      tags: [Mentor]
+      summary: Incoming requests (newest first)
+      description: 'Approved mentor only. Cancelled requests are not shown.'
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MentorRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/requests/{requestId}:
+    patch:
+      tags: [Mentor]
+      summary: Accept or decline a pending request
+      description: |
+        Approved mentor only. Accepting creates an active mentorship and, if the student picked
+        a slot that is still ahead and active, books that session. Accepting fails when the
+        mentor is at full capacity or already mentors the student.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [accepted, declined]
+                reason:
+                  type: string
+                  maxLength: 200
+                  nullable: true
+                  description: Decline reason, visible to the student.
+      responses:
+        '200':
+          description: Updated request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/mentor/students/{studentId}:
+    get:
+      tags: [Mentor]
+      summary: Profile of a student who sent this mentor a request
+      description: |
+        Approved mentor only. The student must have a non-cancelled request to this mentor.
+        `email` is only returned once the mentor has accepted the student.
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentPublicProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/mentor/mentees:
+    get:
+      tags: [Mentor]
+      summary: Active mentees
+      description: 'Approved mentor only.'
+      responses:
+        '200':
+          description: Mentees and capacity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Mentee'
+                  capacity:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/dashboard:
+    get:
+      tags: [Mentor]
+      summary: Dashboard counts, upcoming sessions and latest pending requests
+      description: 'Approved mentor only.'
+      responses:
+        '200':
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending:
+                    type: integer
+                    description: Number of pending requests.
+                  mentees:
+                    type: integer
+                    description: Number of active mentees.
+                  capacity:
+                    type: integer
+                  sessions:
+                    type: integer
+                    description: Number of completed sessions.
+                  rating:
+                    type: number
+                    nullable: true
+                    description: Always null (no rating data collected yet).
+                  upcoming:
+                    type: array
+                    maxItems: 5
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        avatar:
+                          type: string
+                          nullable: true
+                        when:
+                          type: string
+                          example: Wed, 4 Nov 2026 · 4:00 PM
+                        goal:
+                          type: string
+                          nullable: true
+                  recentRequests:
+                    type: array
+                    maxItems: 3
+                    items:
+                      $ref: '#/components/schemas/MentorRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/conversations:
+    get:
+      tags: [Mentor]
+      summary: Conversation list for active mentees
+      description: 'Approved mentor only.'
+      responses:
+        '200':
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    mentee:
+                      $ref: '#/components/schemas/Mentee'
+                    lastMessage:
+                      allOf:
+                        - $ref: '#/components/schemas/ChatMessage'
+                      nullable: true
+                    unread:
+                      type: integer
+                      description: Unread messages from the student.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mentor/conversations/{menteeId}:
+    get:
+      tags: [Mentor]
+      summary: Conversation with one mentee
+      description: "Approved mentor only. Marks the student's messages as read."
+      parameters:
+        - $ref: '#/components/parameters/MenteeId'
+      responses:
+        '200':
+          description: Conversation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mentee:
+                    $ref: '#/components/schemas/Mentee'
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChatMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/mentor/conversations/{menteeId}/messages:
+    post:
+      tags: [Mentor]
+      summary: Send a message to a mentee
+      description: 'Approved mentor only.'
+      parameters:
+        - $ref: '#/components/parameters/MenteeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageBody'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/mentor/sessions:
+    get:
+      tags: [Mentor]
+      summary: Session history
+      description: 'Approved mentor only. Sessions are ordered newest first.'
+      responses:
+        '200':
+          description: Sessions and mentee options for the record-session form
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MentorSession'
+                  mentees:
+                    type: array
+                    description: Names of active mentees.
+                    items:
+                      type: string
+                  menteeOptions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          description: Mentorship id.
+                        name:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Mentor]
+      summary: Record a session summary
+      description: |
+        Approved mentor only. Completes the booked session on that date if there is one,
+        otherwise records a new completed session (times taken from the mentorship's slot or the
+        mentor's availability). The mentee is chosen by `menteeId` (preferred) or by `mentee`
+        name. The date must be today or earlier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, summary]
+              properties:
+                menteeId:
+                  type: integer
+                  description: Mentorship id (preferred over `mentee`).
+                mentee:
+                  type: string
+                  maxLength: 120
+                  description: Mentee name; used when `menteeId` is not sent.
+                date:
+                  type: string
+                  description: '`YYYY-MM-DD` or `16 Oct 2026` / `16 October 2026`.'
+                  example: '2026-10-16'
+                title:
+                  type: string
+                  maxLength: 150
+                  nullable: true
+                summary:
+                  type: string
+                  maxLength: 500
+                actionItems:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                        maxLength: 300
+                        description: Empty items are skipped.
+                      done:
+                        type: boolean
+                        default: false
+      responses:
+        '201':
+          description: Recorded session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Mentor has no availability set to derive session times from
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ------------------------------------------------------------------ admin
+  /api/admin/mentor-applications:
+    get:
+      tags: [Admin]
+      summary: List mentor applications
+      description: |
+        Role: admin. A pending application is a mentor with a complete profile who has not been
+        reviewed yet (mentors still filling in their profile are not listed). Ordered newest
+        first. Pagination is applied only if `page` or `perPage` is sent; the total count is
+        always in the `X-Total-Count` header.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ApprovalStatus'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: perPage
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Applications
+          headers:
+            X-Total-Count:
+              description: Total number of matching applications before pagination.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MentorApplication'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/mentor-applications/{mentorId}:
+    patch:
+      tags: [Admin]
+      summary: Approve or reject a mentor application
+      description: |
+        Role: admin. Only pending applications can be decided, and only mentors with a
+        complete profile can be decided.
+      parameters:
+        - $ref: '#/components/parameters/MentorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected]
+                  description: Case-insensitive.
+      responses:
+        '200':
+          description: Updated application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentorApplication'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Already decided, or the mentor's profile is incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    MentorId:
+      name: mentorId
+      in: path
+      required: true
+      schema:
+        type: integer
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: integer
+    MenteeId:
+      name: menteeId
+      in: path
+      required: true
+      description: Mentorship id of an active mentee (the `id` field of a Mentee).
+      schema:
+        type: integer
+
+  responses:
+    BadRequest:
+      description: Invalid or missing input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid or expired token; account deleted or suspended
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Missing authorization token
+    Forbidden:
+      description: Wrong role, incomplete profile, or mentor not approved
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Please complete your profile first
+    NotFound:
+      description: Resource not found or not owned by the current user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Invalid state change
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+      example:
+        message: Something went wrong
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    Role:
+      type: string
+      enum: [student, mentor, admin, faculty]
+
+    AcademicLevel:
+      type: string
+      enum: [Foundation, Diploma, BSc, BS]
+
+    DayOfWeek:
+      type: string
+      enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
+
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, rejected]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token.
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User id.
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        avatar:
+          type: string
+          nullable: true
+        accountStatus:
+          type: string
+          enum: [active, suspended]
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        profileCompletion:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Always 100 for admin/faculty.
+        profileComplete:
+          type: boolean
+        studentId:
+          type: integer
+          description: Present for students only.
+        mentorId:
+          type: integer
+          description: Present for mentors only.
+        approved:
+          type: boolean
+          description: Present for mentors only.
+        approvalStatus:
+          allOf:
+            - $ref: '#/components/schemas/ApprovalStatus'
+          description: Present for mentors only.
+
+    StudentProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User id.
+        studentId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        academicLevel:
+          allOf:
+            - $ref: '#/components/schemas/AcademicLevel'
+          nullable: true
+        programme:
+          type: string
+          nullable: true
+        dualDegree:
+          type: string
+          description: Empty string when there is no dual degree.
+        bio:
+          type: string
+          nullable: true
+        careerGoal:
+          type: string
+          nullable: true
+        linkedin:
+          type: string
+          nullable: true
+        skills:
+          type: array
+          items:
+            type: string
+        profileCompletion:
+          type: integer
+        profileComplete:
+          type: boolean
+
+    StudentPublicProfile:
+      type: object
+      description: Student profile as seen by a mentor.
+      properties:
+        id:
+          type: integer
+          description: Student id.
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+          description: Null until the mentor has accepted this student.
+        avatar:
+          type: string
+          nullable: true
+        academicLevel:
+          type: string
+          nullable: true
+        programme:
+          type: string
+          nullable: true
+        dualDegree:
+          type: string
+        bio:
+          type: string
+          nullable: true
+        careerGoal:
+          type: string
+          nullable: true
+        linkedin:
+          type: string
+          nullable: true
+        skills:
+          type: array
+          items:
+            type: string
+        joinedOn:
+          type: string
+          nullable: true
+          example: Oct 2026
+        pastMentorships:
+          type: integer
+          description: Completed or ended mentorships.
+
+    CareerStep:
+      type: object
+      properties:
+        stepNumber:
+          type: integer
+        title:
+          type: string
+        organization:
+          type: string
+          nullable: true
+        org:
+          type: string
+          nullable: true
+          description: Alias of `organization`.
+        startYear:
+          type: integer
+          nullable: true
+        endYear:
+          type: integer
+          nullable: true
+          description: Null means present.
+        period:
+          type: string
+          example: 2019 – Present
+
+    CareerStepInput:
+      type: object
+      required: [title, startYear]
+      properties:
+        title:
+          type: string
+          maxLength: 150
+        organization:
+          type: string
+          maxLength: 150
+          nullable: true
+        startYear:
+          type: integer
+          minimum: 1950
+          description: Up to the current year.
+        endYear:
+          type: integer
+          minimum: 1950
+          nullable: true
+          description: Not before `startYear`; null means present.
+
+    MentorCard:
+      type: object
+      description: Mentor as shown to students.
+      properties:
+        id:
+          type: integer
+          description: Mentor id.
+        name:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        photo:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+          description: Current work role.
+        company:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+          description: Always null (not collected).
+        domain:
+          type: string
+          nullable: true
+          description: Mentoring area (career goal name).
+        goals:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          description: Skills.
+          items:
+            type: string
+        experience:
+          type: integer
+          nullable: true
+          description: Years since the work joining year.
+        match:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Fit with the student: 50% same career goal, 30% share of the student's skills the
+            mentor has, 20% share of the goal's skills the mentor has.
+        available:
+          type: boolean
+          description: Approved, available and below capacity.
+        rating:
+          type: number
+          nullable: true
+          description: Always null (no rating data collected yet).
+        sessions:
+          type: integer
+          description: Completed sessions.
+        quote:
+          type: string
+          nullable: true
+          description: First sentence of the bio (max 140 chars).
+        about:
+          type: string
+          nullable: true
+        linkedin:
+          type: string
+          nullable: true
+
+    MentorDetail:
+      allOf:
+        - $ref: '#/components/schemas/MentorCard'
+        - type: object
+          properties:
+            careerPath:
+              type: array
+              items:
+                $ref: '#/components/schemas/CareerStep'
+            slots:
+              type: array
+              maxItems: 8
+              description: Bookable slots for the next 14 days (IST).
+              items:
+                type: string
+                example: Wed, 4 Nov 2026 · 4:00 PM – 4:30 PM
+
+    MentorBrief:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+
+    StudentRequest:
+      type: object
+      description: Mentoring request as seen by the student.
+      properties:
+        id:
+          type: integer
+        mentorId:
+          type: integer
+        mentor:
+          $ref: '#/components/schemas/MentorBrief'
+        goal:
+          type: string
+          nullable: true
+        message:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, declined, cancelled]
+        sentOn:
+          type: string
+          example: 28 Oct 2026
+        sentAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: string
+          format: date-time
+          nullable: true
+        slot:
+          type: string
+          nullable: true
+          example: Wed, 4 Nov 2026 · 4:00 PM – 4:30 PM
+        reason:
+          type: string
+          nullable: true
+          description: Decline reason from the mentor.
+
+    MentorRequest:
+      type: object
+      description: Mentoring request as seen by the mentor.
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        name:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        course:
+          type: string
+          nullable: true
+          description: '"<programme>, <academic level>"'
+        institute:
+          type: string
+          nullable: true
+          description: Always null (not collected).
+        goal:
+          type: string
+          nullable: true
+          description: "Student's overall career goal."
+        topic:
+          type: string
+          nullable: true
+          description: Goal chosen for this request.
+        message:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, declined]
+        receivedAgo:
+          type: string
+          example: 2 hours ago
+        sentOn:
+          type: string
+          example: 28 Oct 2026
+        sentAt:
+          type: string
+          format: date-time
+        slot:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          nullable: true
+          description: Always null (not collected).
+        reason:
+          type: string
+          nullable: true
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        from:
+          type: string
+          enum: [student, mentor]
+        text:
+          type: string
+        time:
+          type: string
+          description: '"4:30 PM" for today, otherwise "28 Oct, 4:30 PM" (IST).'
+        sentAt:
+          type: string
+          format: date-time
+
+    SendMessageBody:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    ActionItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        done:
+          type: boolean
+
+    StudentMentorship:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          example: active
+        startDate:
+          type: string
+          format: date
+        goal:
+          type: string
+          nullable: true
+        mentor:
+          $ref: '#/components/schemas/MentorCard'
+        session:
+          type: object
+          description: Next booked session, otherwise the most recent one (all fields null if none).
+          properties:
+            id:
+              type: integer
+              nullable: true
+            date:
+              type: string
+              nullable: true
+              example: Wed, 4 Nov 2026
+            time:
+              type: string
+              nullable: true
+              example: 4:00 PM – 4:30 PM (IST)
+            link:
+              type: string
+              nullable: true
+              description: Google Meet link.
+            status:
+              type: string
+              nullable: true
+              enum: [booked, completed, cancelled, null]
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        notes:
+          type: string
+          nullable: true
+          description: Latest session summary.
+        actionItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionItem'
+        completed:
+          type: boolean
+          description: Whether the displayed session is completed.
+
+    MentorProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User id.
+        mentorId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        workRole:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+        workJoiningYear:
+          type: integer
+          nullable: true
+        experience:
+          type: integer
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        linkedin:
+          type: string
+          nullable: true
+        skills:
+          type: array
+          items:
+            type: string
+        mentoringArea:
+          type: string
+          nullable: true
+        careerPath:
+          type: array
+          items:
+            $ref: '#/components/schemas/CareerStep'
+        available:
+          type: boolean
+        maxMentees:
+          type: integer
+        approved:
+          type: boolean
+        approvalStatus:
+          $ref: '#/components/schemas/ApprovalStatus'
+        profileCompletion:
+          type: integer
+        profileComplete:
+          type: boolean
+
+    Availability:
+      type: object
+      properties:
+        available:
+          type: boolean
+        maxMentees:
+          type: integer
+        filled:
+          type: integer
+          description: Current number of active mentees.
+        timezone:
+          type: string
+          enum: [IST]
+        schedule:
+          type: array
+          description: Always 7 entries, Monday to Sunday.
+          items:
+            type: object
+            properties:
+              day:
+                $ref: '#/components/schemas/DayOfWeek'
+              enabled:
+                type: boolean
+              ranges:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    start:
+                      type: string
+                      example: '16:00'
+                    end:
+                      type: string
+                      example: '17:00'
+
+    Mentee:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Mentorship id (used as `menteeId`).
+        studentId:
+          type: integer
+        name:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        course:
+          type: string
+          nullable: true
+        institute:
+          type: string
+          nullable: true
+        goal:
+          type: string
+          nullable: true
+        nextSession:
+          type: string
+          nullable: true
+          example: Wed, 4 Nov 2026 · 4:00 PM
+        lastNote:
+          type: string
+          nullable: true
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Percentage of action items completed.
+        startDate:
+          type: string
+          format: date
+
+    MentorSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        menteeId:
+          type: integer
+          nullable: true
+          description: Mentorship id.
+        mentee:
+          type: string
+        date:
+          type: string
+          example: 16 Oct 2026
+        time:
+          type: string
+          example: 4:00 PM – 4:30 PM
+        title:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [Booked, Completed, Cancelled]
+        actionItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionItem'
+
+    MentorApplication:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Mentor id.
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        accountStatus:
+          type: string
+          enum: [active, suspended]
+        role:
+          type: string
+          nullable: true
+          description: Work role.
+        company:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+          description: Always null (not collected).
+        careerPath:
+          type: string
+          nullable: true
+          description: Mentoring area name.
+        careerPathSteps:
+          type: array
+          items:
+            $ref: '#/components/schemas/CareerStep'
+        expertise:
+          type: array
+          items:
+            type: string
+        topics:
+          type: array
+          items:
+            type: string
+        experience:
+          type: string
+          nullable: true
+          example: 5 years
+        workJoiningYear:
+          type: integer
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        linkedin:
+          type: string
+          nullable: true
+        submitted:
+          type: string
+          example: 28 Oct 2026
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        profileCompletion:
+          type: integer
+        checklist:
+          type: object
+          description: Verification items derived from the profile.
+          properties:
+            Professional background:
+              type: boolean
+            Career path:
+              type: boolean
+            Skills & expertise:
+              type: boolean
+            Mentoring area:
+              type: boolean
+            Mentor statement:
+              type: boolean
+            LinkedIn profile:
+              type: boolean
